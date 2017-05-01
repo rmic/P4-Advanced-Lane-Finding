@@ -16,7 +16,7 @@ The goals / steps of this project are the following:
 [undistort1]: ./writeup_images/undistort_1.png "Undistorted"
 [undistort2]: ./writeup_images/undistort_2.png "Undistorted"
 [binary]: ./writeup_images/binary.png "Binary Example"
-[warp]:   ./writeup_images/warp.png "Warp Example"
+[warp]:   ./writeup_images/warped.png "Warp Example"
 [result]: ./writeup_images/result.png "Result"
 [image6]: ./examples/example_output.jpg "Output"
 [video1]: ./project_video.mp4 "Video"
