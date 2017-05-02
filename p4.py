@@ -15,6 +15,7 @@ nx = 9
 ny = 6
 
 
+
 def findObjPoints(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     ret, corners = cv2.findChessboardCorners(gray, (nx,ny), None)
@@ -169,6 +170,10 @@ def apply_lane_mask(img, l_cut=.48, r_cut=.52, b_cut=.9, t_cut=.62, br_cut=.87, 
 
 
 
+src= np.float32([[241,684],[594,450],[686,450],[1061,684]])
+dst= np.float32([[290,720],[290,0],[990,0],[990,720]])
+
+
 def fit_lines(img):
     histogram = np.sum(img[img.shape[0] // 2:, :], axis=0)
     # Create an output image to draw on and  visualize the result
@@ -178,7 +183,8 @@ def fit_lines(img):
     midpoint = np.int(histogram.shape[0] / 2)
     leftx_base = np.argmax(histogram[:midpoint])
     rightx_base = np.argmax(histogram[midpoint:]) + midpoint
-
+    lane_width_px = rightx_base - leftx_base
+    lane_center = leftx_base + (lane_width_px / 2)
     # Choose the number of sliding windows
     nwindows = 19
     # Set height of windows
@@ -224,6 +230,8 @@ def fit_lines(img):
         if len(good_right_inds) > minpix:
             rightx_current = np.int(np.mean(nonzerox[good_right_inds]))
 
+
+
     # Concatenate the arrays of indices
     left_lane_inds = np.concatenate(left_lane_inds)
     right_lane_inds = np.concatenate(right_lane_inds)
@@ -246,8 +254,8 @@ def fit_lines(img):
     out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
 
     y_eval = np.max(ploty)
-    ym_per_pix = 30 / 720  # meters per pixel in y dimension
-    xm_per_pix = 3.7 / 700  # meters per pixel in x dimension
+    ym_per_pix = 40 / 720  # meters per pixel in y dimension
+    xm_per_pix = 3.7 / 700 # lane_width_px  # meters per pixel in x dimension
 
     # Fit new polynomials to x,y in world space
     left_fit_cr = np.polyfit(lefty * ym_per_pix, leftx * xm_per_pix, 2)
@@ -257,22 +265,11 @@ def fit_lines(img):
         2 * left_fit_cr[0])
     right_curverad = ((1 + (2 * right_fit_cr[0] * y_eval * ym_per_pix + right_fit_cr[1]) ** 2) ** 1.5) / np.absolute(
         2 * right_fit_cr[0])
-    # Now our radius of curvature is in meters
+
     mean_curverad = (left_curverad + right_curverad) / 2
-    plt.text(10,700,"Curve radius : {0:.2f}".format(mean_curverad)+" m", color='white')
-    print(left_curverad, 'm', right_curverad, 'm')
-    #plt.show()
-
-
-    return left_curverad, right_curverad, left_fitx, right_fitx, ploty
-
-
-img = cv2.imread('test_images/test5.jpg')
-img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-mtx, dist = distortion(img)
-
-src= np.float32([[241,684],[594,450],[686,450],[1061,684]])
-dst= np.float32([[500,720],[500,0],[800,0],[800,720]])
+    offset_center = (640 - lane_center) * xm_per_pix
+    #print("{0:.2f} m".format(mean_curverad))
+    return left_curverad, right_curverad, left_fitx, right_fitx, ploty, offset_center
 
 
 
@@ -292,7 +289,9 @@ def process_image(img):
     warped_binary = warp(binary, src, dst)
 
     # Fit lines
-    left_curverad, right_curverad, left_fitx, right_fitx, ploty = fit_lines(warped_binary)
+    left_curverad, right_curverad, left_fitx, right_fitx, ploty, offset_center = fit_lines(warped_binary)
+    # Now our radius of curvature is in meters
+    mean_curverad = (left_curverad + right_curverad) / 2
 
 
     warp_zero = np.zeros_like(warped_binary).astype(np.uint8)
@@ -310,24 +309,24 @@ def process_image(img):
     newwarp = warp(color_warp, dst, src)
     # Combine the result with the original image
     result = cv2.addWeighted(undistorted, 1, newwarp, 0.3, 0)
+
+    curveText = "Curve radius : {0:.2f} m".format(right_curverad)
+    centerText = "Distance from center of the lane :{0:.2f} m ".format(offset_center)
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    cv2.putText(result, curveText, (10, 650), font, .75, (255, 255, 255), 2, cv2.LINE_AA)
+    cv2.putText(result, centerText, (10, 700), font, .75, (255, 255, 255), 2, cv2.LINE_AA)
+
     return result
-#f, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 9))
-#f.tight_layout()
-#ax1.imshow(undistorted)
-#for i in range(3):
-#    ax1.plot([src[i][0], src[i+1][0]],[src[i][1], src[i+1][1]], color="r")
-#ax1.set_title('Undistorted Image', fontsize=30)
 
-#ax2.imshow(out)
-#for i in range(3):
-#    ax2.plot([dst[i][0], dst[i+1][0]],[dst[i][1], dst[i+1][1]], color="r")
-#ax2.set_title('Warped', fontsize=30)
-#plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
-#plt.show()
 
-clip1 = VideoFileClip("challenge_video.mp4")
+img = cv2.imread('test_images/test5.jpg')
+img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+mtx, dist = distortion(img)
+
+
+clip1 = VideoFileClip("project_video.mp4")
 white_clip = clip1.fl_image(process_image) #NOTE: this function expects color images!!
-white_clip.write_videofile("output_challenge.mp4", audio=False,fps=25,codec='mpeg4')
+white_clip.write_videofile("output.mp4", audio=False,fps=25,codec='mpeg4')
 
 
 print("It works.")
